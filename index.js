@@ -33,7 +33,7 @@ app.use("/api/openai", openAiRoutes);
 app.use("/api/properties", propertiesRoutes);
 
 // default get route
-app.get("/", (req, res) => {
+app.get("/api", (req, res) => {
   res.send("AI Real Estate Image Generator server is running");
 });
 
