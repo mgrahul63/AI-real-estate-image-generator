@@ -19,7 +19,7 @@ app.use(morgan("dev"));
 // run mongodb
 dbConnect();
 
-app.post("/test", (req, res) => {
+app.post("/api/test", (req, res) => {
   return res.status(200).json({
     success: true,
     data: "I'm ok!",
@@ -27,10 +27,10 @@ app.post("/test", (req, res) => {
 });
 
 // open ai api routes
-app.use("/openai", openAiRoutes);
+app.use("/api/openai", openAiRoutes);
 
 // properties routes
-app.use("/properties", propertiesRoutes);
+app.use("/api/properties", propertiesRoutes);
 
 // default get route
 app.get("/", (req, res) => {
