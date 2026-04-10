@@ -19,6 +19,13 @@ app.use(morgan("dev"));
 // run mongodb
 dbConnect();
 
+app.post("/test", (req, res) => {
+  return res.status(200).json({
+    success: true,
+    data: "I'm ok!",
+  });
+});
+
 // open ai api routes
 app.use("/openai", openAiRoutes);
 
