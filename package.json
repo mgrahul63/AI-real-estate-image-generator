@@ -2,10 +2,11 @@
   "name": "ai-estate-image-generator",
   "version": "1.0.0",
   "description": "AI-powered image generation for real estate listings",
-  "main": "index.js",
+  "main": "server.js",
+  "type": "module",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
   "author": "MD Raful Mia",
   "license": "ISC",
