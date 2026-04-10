@@ -19,7 +19,7 @@ app.use(morgan("dev"));
 // run mongodb
 dbConnect();
 
-app.post("/api/test", (req, res) => {
+app.post("/api/v1/test", (req, res) => {
   return res.status(200).json({
     success: true,
     data: "I'm ok!",
@@ -27,13 +27,13 @@ app.post("/api/test", (req, res) => {
 });
 
 // open ai api routes
-app.use("/api/openai", openAiRoutes);
+app.use("/api/v1/openai", openAiRoutes);
 
 // properties routes
-app.use("/api/properties", propertiesRoutes);
+app.use("/api/v1/properties", propertiesRoutes);
 
 // default get route
-app.get("/api", (req, res) => {
+app.get("/api/v1", (req, res) => {
   res.send("AI Real Estate Image Generator server is running");
 });
 
