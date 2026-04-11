@@ -1,46 +1,26 @@
 import { Router } from "express";
 import { ObjectId } from "mongodb";
 import { propertiesCollection } from "../collections/collections.js";
+import { ImageGenerate } from "../models/image-generate.js";
 
 const router = Router();
 
-// get all properties
 router.get("/", async (req, res) => {
   try {
-    const query = {};
-    const options = {
-      sort: { createdAt: -1 },
-    };
-    const cursor = propertiesCollection.find(query, options);
-    const result = await cursor.toArray();
-    // send response
-    res.status(200).json({
-      success: true,
-      data: result,
-    });
-  } catch (err) {
-    res.status(404).json({
-      success: false,
-      error: err.message,
-    });
-  }
-});
+    const { email } = req.query;
 
-// get all products based on user email
-router.get("/user", async (req, res) => {
-  try {
-    const userEmail = req.query.email;
-    const query = { userEmail };
-    const cursor = propertiesCollection.find(query);
-    const result = await cursor.toArray();
-    res.status(200).json({
+    const filter = email ? { email } : {};
+
+    const properties = await ImageGenerate.find(filter).lean();
+
+    return res.status(200).json({
       success: true,
-      data: result,
+      data: properties,
     });
   } catch (err) {
-    res.status(404).json({
+    return res.status(500).json({
       success: false,
-      error: err.message,
+      message: err.message || "Failed to fetch properties",
     });
   }
 });

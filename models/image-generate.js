@@ -7,6 +7,10 @@ const imageGenerateSchema = new mongoose.Schema(
       required: true,
     },
 
+    displayName: {
+      type: String,
+    },
+
     prompt: {
       type: String,
     },

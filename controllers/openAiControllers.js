@@ -60,7 +60,7 @@ const generateImage = async (req, res) => {
 
 // create text and image (FULL FREE VERSION)
 const generateTextAndImage = async (req, res) => {
-  const { prompt, email } = req.body;
+  const { prompt, email,displayName } = req.body;
 
   try {
     // =========================
@@ -233,6 +233,7 @@ Return ONLY valid JSON:
     // =========================
     const savedData = await ImageGenerate.create({
       email,
+      displayName,
       prompt,
       description: parsed.description,
       price: parsed.price,
