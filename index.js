@@ -9,17 +9,22 @@ import propertiesRoutes from "./routes/propertiesRoutes.js";
 dotenv.config();
 
 const app = express();
+ 
 const port = process.env.PORT || 5000;
 
 // middleware
 app.use(cors());
 app.use(json());
 app.use(morgan("dev"));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // run mongodb
 dbConnect();
 
 app.post("/api/v1/test", (req, res) => {
+  console.log(req.body);
+  console.log("calling...");
   return res.status(200).json({
     success: true,
     data: "I'm ok!",

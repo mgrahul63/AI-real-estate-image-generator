@@ -1,13 +1,17 @@
 import axios from "axios";
-import { writeFileSync } from "fs";
-import imgbbUploader from "imgbb-uploader";
-import { Configuration, OpenAIApi } from "openai";
 import sharp from "sharp";
 
-const configuration = new Configuration({
+import OpenAI from "openai";
+
+import dotenv from "dotenv";
+dotenv.config();
+
+import cloudinary from "../config/cloudinary.js";
+import { ImageGenerate } from "../models/image-generate.js";
+
+const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
-const openai = new OpenAIApi(configuration);
 
 const generateText = async (req, res) => {
   const { prompt } = req.body;
@@ -54,76 +58,343 @@ const generateImage = async (req, res) => {
   }
 };
 
-// create text and image with one prompt
+// create text and image (FULL FREE VERSION)
 const generateTextAndImage = async (req, res) => {
-  const { prompt, size } = req.body;
-  let imageSize =
-    size === "small" ? "256x256" : size === "medium" ? "512x512" : "1024x1024";
-  try {
-    // text response
-    const textResponse = await openai.createCompletion({
-      model: "text-davinci-003",
-      prompt: `${prompt}.\nAssume that you are the realtor or agent of the real estate property business.Now give me an actual output of real estate property valuation based on the above data.\nGive me full details./nSet emojis for each topic`,
-      max_tokens: 500,
-      temperature: 0,
-    });
-    const createdText = textResponse.data.choices[0].text;
-    // valuation response
-    const valuationCostResponse = await openai.createCompletion({
-      model: "text-davinci-003",
-      prompt: `${createdText}.\nGive me the property valuation cost only money in Number/nMust be in number format. with a relevant emoji`,
-      max_tokens: 250,
-      temperature: 0,
-    });
-    const valuationCost = valuationCostResponse.data.choices[0].text;
-    // image response
-    const imageResponse = await openai.createImage({
-      prompt:
-        "Generate a realistic image of a modern real estate property building with a sleek design. The building should have multiple floors, large windows, and architectural elements that make it visually appealing. The surroundings should include well-maintained landscaping with trees, bushes, and a paved walkway leading to the entrance. The image should have a clear and sunny sky as the background",
-      n: 1,
-      size: imageSize,
-    });
-    const imageUrl = imageResponse.data.data[0].url;
+  const { prompt, email } = req.body;
 
-    // png image to jpeg
-    const pngImageUrl = imageUrl;
-    const outputFilePath = "estate.jpg";
-    axios({
-      url: pngImageUrl,
-      responseType: "arraybuffer",
-    })
-      .then((response) => {
-        // Convert the PNG image buffer to a JPEG image buffer
-        return sharp(response.data).jpeg().toBuffer();
-      })
-      .then((jpegBuffer) => {
-        // Save the JPEG image buffer to a file
-        writeFileSync(outputFilePath, jpegBuffer);
-        console.log("PNG image converted to JPEG and saved successfully!");
-      })
-      .catch((error) => {
-        console.error("An error occurred:", error);
-      });
-    // save image to imgbb
-    const response = await imgbbUploader(
-      process.env.imageAPIKey,
-      outputFilePath,
+  try {
+    // =========================
+    // 1. TEXT GENERATION (GROQ)
+    // =========================
+    const textResponse = await axios.post(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        model: "llama-3.1-8b-instant",
+        messages: [
+          {
+            role: "user",
+            content: `
+You are a real estate expert.
+
+Property data:
+${prompt}
+
+Return ONLY valid JSON:
+{
+  "description": "short property description",
+  "price": "estimated price",
+  "analysis": "investment insight"
+}
+            `,
+          },
+        ],
+        temperature: 0.7,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      },
     );
-    // return the response
+
+    const rawText = textResponse.data?.choices?.[0]?.message?.content || "";
+
+    let parsed;
+    try {
+      const match = rawText.match(/\{[\s\S]*\}/);
+      parsed = match ? JSON.parse(match[0]) : null;
+    } catch {
+      parsed = null;
+    }
+
+    if (!parsed) {
+      parsed = {
+        description: rawText,
+        price: "N/A",
+        analysis: "N/A",
+      };
+    }
+
+    // =========================
+    // 2. SHORT PROMPT OBJECT
+    // =========================
+    const promptObj = Object.fromEntries(
+      prompt.split("\n").map((line) => line.split(":")),
+    );
+
+    // =========================
+    // 3. BUILD SHORT RANDOM IMAGE PROMPT
+    // =========================
+    const buildImagePrompt = (p) => {
+      const buildingTypes = [
+        "apartment building",
+        "residential building",
+        "apartment complex",
+        "condominium",
+        "modern flats",
+        "housing complex",
+      ];
+
+      const styles = [
+        "modern",
+        "luxury",
+        "minimal",
+        "contemporary",
+        "glass facade",
+        "concrete design",
+      ];
+
+      const angles = [
+        "front view",
+        "aerial view",
+        "street view",
+        "corner view",
+        "wide angle",
+      ];
+
+      const times = ["daylight", "sunset", "morning", "evening"];
+
+      const random = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+      const seed = Date.now() + Math.random();
+
+      return `${random(styles)} ${random(
+        buildingTypes,
+      )}, ${random(angles)}, ${random(times)}, realistic, ${p.city || "Bangladesh"}, seed ${seed}`;
+    };
+
+    const imagePrompt = buildImagePrompt(promptObj);
+
+    // =========================
+    // 4. FETCH IMAGE
+    // =========================
+    const fetchImage = async (url) => {
+      try {
+        const res = await axios.get(url, {
+          responseType: "arraybuffer",
+          timeout: 15000,
+        });
+        return res.data;
+      } catch {
+        return null;
+      }
+    };
+
+    const uniqueSeed = Date.now() + Math.random();
+
+    // =========================
+    // 5. MULTIPLE IMAGE SOURCES
+    // =========================
+    const imageSources = [
+      `https://image.pollinations.ai/p/${encodeURIComponent(
+        imagePrompt + uniqueSeed,
+      )}`,
+
+      `https://image.pollinations.ai/p/${encodeURIComponent(
+        "modern apartment building realistic " + uniqueSeed,
+      )}`,
+
+      `https://picsum.photos/800/600?random=${uniqueSeed}`,
+    ];
+
+    let imageBuffer = null;
+
+    for (const url of imageSources) {
+      imageBuffer = await fetchImage(url);
+      if (imageBuffer) break;
+    }
+
+    if (!imageBuffer) {
+      throw new Error("All image sources failed");
+    }
+
+    // =========================
+    // 6. OPTIMIZE IMAGE
+    // =========================
+    const optimizedImage = await sharp(imageBuffer)
+      .jpeg({ quality: 90 })
+      .toBuffer();
+
+    // =========================
+    // 7. UPLOAD CLOUDINARY
+    // =========================
+    const uploadResult = await new Promise((resolve, reject) => {
+      cloudinary.uploader
+        .upload_stream({ folder: "ai-real-estate-image" }, (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        })
+        .end(optimizedImage);
+    });
+
+    // =========================
+    // 8. SAVE DATABASE
+    // =========================
+    const savedData = await ImageGenerate.create({
+      email,
+      prompt,
+      description: parsed.description,
+      price: parsed.price,
+      analysis: parsed.analysis,
+      imageUrl: uploadResult.secure_url,
+      publicId: uploadResult.public_id,
+    });
+
+    // =========================
+    // 9. RESPONSE
+    // =========================
     return res.status(200).json({
       success: true,
-      valuationCost,
-      createdText,
-      imageUrl: response.display_url,
+      data: savedData,
     });
   } catch (err) {
-    return res.status(404).json({
+    console.log("ERROR:", err?.response?.data || err.message);
+
+    return res.status(500).json({
       success: false,
-      error: err.message,
+      message: err?.response?.data?.error || err.message,
     });
   }
 };
 
+// const generateTextAndImage = async (req, res) => {
+//   const { prompt, email } = req.body;
+
+//   try {
+//     // =========================
+//     // 1. TEXT GENERATION (GROQ)
+//     // =========================
+//     const textResponse = await axios.post(
+//       "https://api.groq.com/openai/v1/chat/completions",
+//       {
+//         model: "llama-3.1-8b-instant",
+//         messages: [
+//           {
+//             role: "user",
+//             content: `
+// You are a real estate expert.
+
+// Property data:
+// ${prompt}
+
+// Return ONLY valid JSON:
+// {
+//   "description": "short property description",
+//   "price": "estimated price",
+//   "analysis": "investment insight"
+// }
+//             `,
+//           },
+//         ],
+//         temperature: 0.7,
+//       },
+//       {
+//         headers: {
+//           Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+//           "Content-Type": "application/json",
+//         },
+//       },
+//     );
+
+//     const rawText = textResponse.data?.choices?.[0]?.message?.content || "";
+
+//     let parsed;
+//     try {
+//       const match = rawText.match(/\{[\s\S]*\}/);
+//       parsed = match ? JSON.parse(match[0]) : null;
+//     } catch {
+//       parsed = null;
+//     }
+
+//     if (!parsed) {
+//       parsed = {
+//         description: rawText,
+//         price: "N/A",
+//         analysis: "N/A",
+//       };
+//     }
+
+//     // =========================
+//     // 2. IMAGE GENERATION (STABLE MULTI-SOURCE)
+//     // =========================
+//     const fetchImage = async (url) => {
+//       try {
+//         const res = await axios.get(url, {
+//           responseType: "arraybuffer",
+//           timeout: 8000,
+//         });
+//         return res.data;
+//       } catch {
+//         return null;
+//       }
+//     };
+
+//     const imageSources = [
+//       `https://image.pollinations.ai/p/luxury%20real%20estate%20building`,
+//       `https://image.pollinations.ai/p/modern%20house%20architecture`,
+//       `https://picsum.photos/800/600`,
+//     ];
+
+//     let imageBuffer = null;
+
+//     for (const url of imageSources) {
+//       imageBuffer = await fetchImage(url);
+//       if (imageBuffer) break;
+//     }
+
+//     if (!imageBuffer) {
+//       throw new Error("All image sources failed");
+//     }
+
+//     // =========================
+//     // 3. IMAGE PROCESSING
+//     // =========================
+//     const optimizedImage = await sharp(imageBuffer)
+//       .jpeg({ quality: 90 })
+//       .toBuffer();
+
+//     // =========================
+//     // 4. UPLOAD TO CLOUDINARY
+//     // =========================
+//     const uploadResult = await new Promise((resolve, reject) => {
+//       cloudinary.uploader
+//         .upload_stream({ folder: "ai-real-estate-image" }, (error, result) => {
+//           if (error) reject(error);
+//           else resolve(result);
+//         })
+//         .end(optimizedImage);
+//     });
+
+//     // =========================
+//     // 5. SAVE TO DATABASE
+//     // =========================
+//     const savedData = await ImageGenerate.create({
+//       email,
+//       prompt,
+//       description: parsed.description,
+//       price: parsed.price,
+//       analysis: parsed.analysis,
+//       imageUrl: uploadResult.secure_url,
+//       publicId: uploadResult.public_id,
+//     });
+
+//     // =========================
+//     // 6. RESPONSE
+//     // =========================
+//     return res.status(200).json({
+//       success: true,
+//       data: savedData,
+//     });
+//   } catch (err) {
+//     console.log("ERROR:", err?.response?.data || err.message);
+
+//     return res.status(500).json({
+//       success: false,
+//       message: err?.response?.data?.error || err.message,
+//     });
+//   }
+// };
 // generate social media poster
 const generateSocialMediaPoster = async (req, res) => {
   const { features, image } = req.body;
